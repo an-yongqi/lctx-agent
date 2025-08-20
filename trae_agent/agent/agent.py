@@ -9,6 +9,7 @@ from trae_agent.utils.trajectory_recorder import TrajectoryRecorder
 
 class AgentType(Enum):
     TraeAgent = "trae_agent"
+    LongContextAgent = "long_context_agent"
 
 
 class Agent:
@@ -42,6 +43,17 @@ class Agent:
 
                 self.agent: TraeAgent = TraeAgent(self.agent_config)
                 self.agent.set_cli_console(cli_console)
+            case AgentType.LongContextAgent:
+                if config.trae_agent is None:
+                    raise ValueError("trae_agent_config is required for LongContextAgent")
+                from .long_context_agent import LongContextAgent
+
+                self.agent_config: AgentConfig = config.trae_agent
+
+                self.agent: LongContextAgent = LongContextAgent(self.agent_config)
+                self.agent.set_cli_console(cli_console)
+            case _:
+                raise ValueError(f"Unsupported agent type: {self.agent_type}")
 
         if cli_console:
             if config.trae_agent.enable_lakeview:
@@ -59,7 +71,7 @@ class Agent:
     ):
         self.agent.new_task(task, extra_args, tool_names)
 
-        if self.agent.allow_mcp_servers:
+        if hasattr(self.agent, 'allow_mcp_servers') and self.agent.allow_mcp_servers:
             if self.agent.cli_console:
                 self.agent.cli_console.print("Initialising MCP tools...")
             await self.agent.initialise_mcp()
@@ -87,7 +99,8 @@ class Agent:
         finally:
             # Ensure MCP cleanup happens even if execution fails
             with contextlib.suppress(Exception):
-                await self.agent.cleanup_mcp_clients()
+                if hasattr(self.agent, 'cleanup_mcp_clients'):
+                    await self.agent.cleanup_mcp_clients()
 
         if cli_console_task:
             await cli_console_task
